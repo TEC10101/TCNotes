@@ -2,6 +2,7 @@
 -- Section 1: Event Frame Registration
 --------------------------------------------------
 local addonName = ... -- should resolve to folder "TCNotes"
+local ADDON_VERSION = (GetAddOnMetadata and GetAddOnMetadata(addonName, "Version")) or "0.0.0"
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
@@ -17,6 +18,7 @@ M.charKey = nil
 M.initialized = false
 M.restoring = false
 M.frame = nil
+M.deleteStack = M.deleteStack or {}
 
 -- SavedVariables root: TCNotesDB
 -- Schema:
@@ -30,6 +32,7 @@ local function InitSavedVariables()
     TCNotesDB = TCNotesDB or {}
     TCNotesDB.globalNotes = TCNotesDB.globalNotes or {}
     TCNotesDB.charNotes = TCNotesDB.charNotes or {}
+    TCNotesDB.version = TCNotesDB.version or ADDON_VERSION
     -- load DB or initialize defaults
     TCNotesDB.frameState = TCNotesDB.frameState or {
         width = 400,
@@ -111,11 +114,57 @@ function M:UpdateNote(section, index, text)
     if text == "" then
         table.remove(list, index)
     else
-        if type(list[index]) == "table" then
-            list[index].text = text
+        if type(list[index]) ~= "table" then
+            list[index] = { text = tostring(text or "") }
         else
-            list[index] = text
+            list[index].text = text
         end
+    end
+end
+
+-- Soft-delete: flag a note as deleted and push to a LIFO undo stack
+function M:FlagDeleteNote(section, index)
+    local list = M:GetNotes(section)
+    if not list or index < 1 or index > #list then return end
+    local entry = list[index]
+    if type(entry) ~= "table" then
+        entry = { text = tostring(entry or "") }
+        list[index] = entry
+    end
+    if entry.deleted then return end
+    entry.deleted = true
+    table.insert(M.deleteStack, { section = section, index = index })
+end
+
+-- Undo the most recent FlagDeleteNote (if still applicable)
+function M:UndoDelete()
+    local item = table.remove(M.deleteStack)
+    if not item then return false end
+    local list = M:GetNotes(item.section)
+    if not list or item.index < 1 or item.index > #list then return false end
+    local entry = list[item.index]
+    if type(entry) ~= "table" then return false end
+    entry.deleted = nil
+    return true
+end
+
+-- Remove any entries flagged deleted from both global and current character lists
+function M:PruneDeleted()
+    local function prune(list)
+        if not list then return end
+        local i = 1
+        while i <= #list do
+            local e = list[i]
+            if type(e) == "table" and e.deleted then
+                table.remove(list, i)
+            else
+                i = i + 1
+            end
+        end
+    end
+    prune(TCNotesDB.globalNotes)
+    if M.charKey and TCNotesDB.charNotes[M.charKey] then
+        prune(TCNotesDB.charNotes[M.charKey])
     end
 end
 
@@ -297,6 +346,14 @@ SlashCmdList["TCNOTES"] = function(msg)
         if M.charKey and TCNotesDB.charNotes[M.charKey] then
             c = #TCNotesDB.charNotes[M.charKey]
         end
+    elseif msg == "undo" then
+        local ok = M:UndoDelete()
+        if M.frame and M.RefreshAll then M:RefreshAll() end
+        if ok then M:Print("Undo delete: restored last hidden note") else M:Print("Nothing to undo") end
+    elseif msg == "prune" then
+        M:PruneDeleted()
+        if M.frame and M.RefreshAll then M:RefreshAll() end
+        M:Print("Pruned deleted notes from DB")
     else
         M:Toggle()
     end

@@ -482,89 +482,83 @@ RefreshSection = function(def)
     if section.collapsed then return end
     local notes = M:GetNotes(def.key)
 
-    -- width available for text (leave padding for delete button and margins)
     local textWidth = math.max(40, section.scrollFrame:GetWidth() - 40)
     section.scrollChild:SetWidth(section.scrollFrame:GetWidth())
 
     local totalH = 0
+    local visibleIndex = 0
     for i = 1, #notes do
-        local row = section.rows[i]
-        if not row then
-            row = CreateRow(section.scrollChild)
-            section.rows[i] = row
-            row:SetPoint("TOPLEFT", section.scrollChild, "TOPLEFT", 0, -totalH)
-            row:SetPoint("RIGHT", -2, 0)
-        else
+        local note = notes[i]
+        local isDeleted = (type(note) == "table" and note.deleted)
+        if not isDeleted then
+            visibleIndex = visibleIndex + 1
+            local row = section.rows[visibleIndex]
+            if not row then
+                row = CreateRow(section.scrollChild)
+                section.rows[visibleIndex] = row
+            end
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", section.scrollChild, "TOPLEFT", 0, -totalH)
             row:SetPoint("RIGHT", -2, 0)
-        end
 
-        local note = notes[i]
-        local txt = (type(note) == "table" and note.text) or note
-        -- measure the wrapped height using the hidden FontString
-        row.text:SetWidth(textWidth)
-        row.text:SetText("")
-        row.text:SetText(txt)
-        -- update visible message frame content
-        if row.msg then
-            row.msg:Clear()
-            row.msg:AddMessage(txt)
-            row.msg:SetWidth(textWidth)
-        end
-
-        row.delete:SetScript("OnClick", function()
-            M:DeleteNote(def.key, i)
-            RefreshSection(def)
-        end)
-        row.dataIndex = i
-        row.sectionKey = def.key
-        row.sectionDef = def
-        row.note = note
-        if row.reminderBtn then
-            row.reminderBtn:SetScript("OnClick", function()
-                EnsureReminderDialog()
-                ReminderDlg:Open(row)
-            end)
-            -- Update label only; tooltip is handled dynamically in CreateRow's OnEnter
-            if type(note) == "table" and note.reminder then
-                row.reminderBtn:SetText("!")
-            else
-                row.reminderBtn:SetText("R")
+            local txt = (type(note) == "table" and note.text) or note
+            row.text:SetWidth(textWidth)
+            row.text:SetText("")
+            row.text:SetText(txt)
+            if row.msg then
+                row.msg:Clear()
+                row.msg:AddMessage(txt)
+                row.msg:SetWidth(textWidth)
             end
-        end
 
-        if not row.editing then
-            row.editBox:Hide()
-            if row.msg then row.msg:Show() end
-        else
-            -- when editing, set editBox size to match text area
-            row.editBox:SetWidth(textWidth)
-            row.editBox:SetHeight(math.max(20, row.text:GetStringHeight() + ROW_PADDING))
-            if row.msg then row.msg:Hide() end
-        end
+            row.delete:SetScript("OnClick", function()
+                if row.editing then
+                    row.editing = false
+                    row.editBox:Hide()
+                    if row.msg then row.msg:Show() end
+                end
+                if M.FlagDeleteNote then M:FlagDeleteNote(def.key, row.dataIndex) end
+                RefreshSection(def)
+            end)
+            row.dataIndex = i
+            row.sectionKey = def.key
+            row.sectionDef = def
+            row.note = note
 
-        -- Add a small vertical padding so ScrollingMessageFrame rendering and
-        -- FontString measurement align (prevents overlap for multi-line rows).
-        local h = math.max(LINE_HEIGHT, SafeStringHeight(row.text) + ROW_PADDING)
-        if row.msg then row.msg:SetHeight(h) end
-        row:SetHeight(h)
-        totalH = totalH + h
-        row:Show()
+            if row.reminderBtn then
+                row.reminderBtn:SetScript("OnClick", function()
+                    EnsureReminderDialog()
+                    ReminderDlg:Open(row)
+                end)
+                if type(note) == "table" and note.reminder then
+                    row.reminderBtn:SetText("!")
+                else
+                    row.reminderBtn:SetText("R")
+                end
+            end
+
+            if not row.editing then
+                row.editBox:Hide()
+                if row.msg then row.msg:Show() end
+            else
+                row.editBox:SetWidth(textWidth)
+                row.editBox:SetHeight(math.max(20, row.text:GetStringHeight() + ROW_PADDING))
+                if row.msg then row.msg:Hide() end
+            end
+
+            local h = math.max(LINE_HEIGHT, SafeStringHeight(row.text) + ROW_PADDING)
+            if row.msg then row.msg:SetHeight(h) end
+            row:SetHeight(h)
+            totalH = totalH + h
+            row:Show()
+        end
     end
 
-    -- hide any extra rows
-    for i = #notes + 1, #section.rows do
+    for i = visibleIndex + 1, #section.rows do
         section.rows[i]:Hide()
     end
 
     section.scrollChild:SetHeight(totalH)
-
-    -- respect section offset (scroll position) if used by the scroll handler
-    if section.scrollFrame and section.offset then
-        local ofs = math.max(0, section.offset or 0)
-        section.scrollFrame:SetVerticalScroll(ofs * LINE_HEIGHT)
-    end
 end
 
 -- Builds the UI container for a specific note section (global or character).
@@ -579,7 +573,6 @@ local function CreateSection(parent, def)
     container.addBox:SetHeight(20)
     container.addBox:SetPoint("TOPLEFT", container.title, "BOTTOMLEFT", 6, -4)
     container.addBox:SetPoint("RIGHT", -20, 0)
-    -- Background fill for add box
     if not container.addBox.bg then
         local bg = container.addBox:CreateTexture(nil, "BACKGROUND")
         bg:SetColorTexture(0,0,0,0.45)
@@ -602,9 +595,6 @@ local function CreateSection(parent, def)
     end
     container.addBox:SetScript("OnEnterPressed", tryAdd)
 
-    -- Not exactly a "Add" button, but functions to let us add notes via keyboard.
-    -- container.addBtn = CreateFrame("Button", nil, container, "UIPanelButtonTemplate")
-
     container.scrollFrame = CreateFrame("ScrollFrame", nil, container, "UIPanelScrollFrameTemplate")
     container.scrollFrame:SetPoint("TOPLEFT", container.addBox, "BOTTOMLEFT", 0, -6)
     container.scrollFrame:SetPoint("BOTTOMRIGHT", -26, 4)
@@ -621,87 +611,7 @@ local function CreateSection(parent, def)
     return container
 end
 
--- Refreshes the rows within a section container to match current notes.
-RefreshSection = function(def)
-    local section = def.container
-    if section.collapsed then return end
-    local notes = M:GetNotes(def.key)
-
-    -- width available for text (leave padding for delete button and margins)
-    local textWidth = math.max(40, section.scrollFrame:GetWidth() - 40)
-    section.scrollChild:SetWidth(section.scrollFrame:GetWidth())
-
-    local totalH = 0
-    for i = 1, #notes do
-        local row = section.rows[i]
-        if not row then
-            row = CreateRow(section.scrollChild)
-            section.rows[i] = row
-            row:SetPoint("TOPLEFT", section.scrollChild, "TOPLEFT", 0, -totalH)
-            row:SetPoint("RIGHT", -2, 0)
-        else
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", section.scrollChild, "TOPLEFT", 0, -totalH)
-            row:SetPoint("RIGHT", -2, 0)
-        end
-
-        local note = notes[i]
-        local txt = (type(note) == "table" and note.text) or note
-        -- measure with hidden FontString
-        row.text:SetWidth(textWidth)
-        row.text:SetText("")
-        row.text:SetText(txt)
-        -- set visible message text with hyperlinks
-        if row.msg then
-            row.msg:Clear()
-            row.msg:AddMessage(txt)
-            row.msg:SetWidth(textWidth)
-        end
-        row.delete:SetScript("OnClick", function()
-            M:DeleteNote(def.key, i)
-            RefreshSection(def)
-        end)
-        row.dataIndex = i
-        row.sectionKey = def.key
-        row.sectionDef = def
-
-        row.note = note
-        if row.reminderBtn then
-            row.reminderBtn:SetScript("OnClick", function()
-                EnsureReminderDialog()
-                ReminderDlg:Open(row)
-            end)
-            if type(note) == "table" and note.reminder then
-                row.reminderBtn:SetText("!")
-            else
-                row.reminderBtn:SetText("R")
-            end
-        end
-
-        if not row.editing then
-            row.editBox:Hide()
-            if row.msg then row.msg:Show() end
-        else
-            -- when editing, set editBox size to match text area
-            row.editBox:SetWidth(textWidth)
-            row.editBox:SetHeight(math.max(20, row.text:GetStringHeight() + ROW_PADDING))
-            if row.msg then row.msg:Hide() end
-        end
-
-        local h = math.max(LINE_HEIGHT, SafeStringHeight(row.text) + ROW_PADDING)
-        if row.msg then row.msg:SetHeight(h) end
-        row:SetHeight(h)
-        totalH = totalH + h
-        row:Show()
-    end
-
-    -- hide any extra rows
-    for i = #notes + 1, #section.rows do
-        section.rows[i]:Hide()
-    end
-
-    section.scrollChild:SetHeight(totalH)
-end
+-- (Removed second, corrupted RefreshSection duplicate.)
 
 -- Hooks button and scroll handlers that belong to a section container.
 local function HookSection(def)
