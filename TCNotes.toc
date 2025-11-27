@@ -1,0 +1,16 @@
+## Interface: 30300
+## Title: TCNotes
+## Notes: Minimal global & per-character notes.  Add a reminder to popup every login, or when you reach a certain level!
+## Author: Refactored
+## Version: 1.2.2
+## SavedVariables: TCNotesDB
+
+## OptionalDeps: LibSharedMedia-3.0
+
+#@no-lib-strip@
+libs\LibStub\LibStub.lua
+libs\CallbackHandler-1.0\CallbackHandler-1.0\CallbackHandler-1.0.xml
+libs\LibSharedMedia-3.0\lib.xml
+#@end-no-lib-strip@
+
+Main.xml
