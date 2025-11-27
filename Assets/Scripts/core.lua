@@ -131,31 +131,51 @@ local function ShowReminderPopup(msgs)
         reminderPopup = CreateFrame("Frame", "TCNotesReminderPopup", UIParent, "BackdropTemplate")
         reminderPopup:SetSize(440, 160)
         reminderPopup:SetPoint("CENTER")
+        -- ensure the reminder popup appears below most UI elements
+        reminderPopup:SetFrameStrata("BACKGROUND")
         reminderPopup:SetBackdrop({ bgFile = "Interface/DialogFrame/UI-DialogBox-Background", edgeFile = "Interface/DialogFrame/UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 16, insets = { left = 8, right = 8, top = 8, bottom = 8 } })
-        reminderPopup.text = reminderPopup:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        reminderPopup.text:SetPoint("TOPLEFT", 12, -12)
-        reminderPopup.text:SetPoint("TOPRIGHT", -12, -12)
-        reminderPopup.text:SetJustifyH("LEFT")
-        reminderPopup.text:SetJustifyV("TOP")
-        reminderPopup.text:SetWordWrap(true)
-        reminderPopup.text:SetWidth(416)
+        -- Use a ScrollingMessageFrame so hyperlinks are interactive (tooltips on hover)
+        reminderPopup.msg = CreateFrame("ScrollingMessageFrame", nil, reminderPopup)
+        reminderPopup.msg:SetPoint("TOPLEFT", 12, -12)
+        reminderPopup.msg:SetPoint("TOPRIGHT", -12, -12)
+        -- Reserve space at the bottom for the OK button
+        reminderPopup.msg:SetPoint("BOTTOMLEFT", 12, 36)
+        reminderPopup.msg:SetPoint("BOTTOMRIGHT", -12, 36)
+        reminderPopup.msg:SetJustifyH("LEFT")
+        reminderPopup.msg:SetFading(false)
+        reminderPopup.msg:SetMaxLines(200)
+        reminderPopup.msg:SetFontObject(GameFontNormal)
+        -- Enable link hovering; WoW will fire OnHyperlinkEnter/Leave for |H...|h[...]|h links
+        if reminderPopup.msg.SetHyperlinksEnabled then
+            reminderPopup.msg:SetHyperlinksEnabled(true)
+        end
+        reminderPopup.msg:SetScript("OnHyperlinkEnter", function(self, link, text, button)
+            GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+            if GameTooltip.SetHyperlink then
+                GameTooltip:SetHyperlink(link)
+            end
+            GameTooltip:Show()
+        end)
+        reminderPopup.msg:SetScript("OnHyperlinkLeave", function()
+            GameTooltip:Hide()
+        end)
         reminderPopup.ok = CreateFrame("Button", nil, reminderPopup, "UIPanelButtonTemplate")
         reminderPopup.ok:SetSize(80, 24)
         reminderPopup.ok:SetPoint("BOTTOM", 0, 8)
         reminderPopup.ok:SetText("OK")
         reminderPopup.ok:SetScript("OnClick", function() reminderPopup:Hide() end)
     end
-    -- msgs can be a string or table of strings
-    local out = ""
+    -- msgs can be a string or table of strings; render with hyperlinks enabled
+    reminderPopup.msg:Clear()
     if type(msgs) == "table" then
         for i = 1, #msgs do
-            out = out .. (msgs[i] or "")
-            if i < #msgs then out = out .. "\n\n" end
+            local line = tostring(msgs[i] or "")
+            if line ~= "" then reminderPopup.msg:AddMessage(line) end
+            if i < #msgs then reminderPopup.msg:AddMessage(" ") end
         end
     else
-        out = tostring(msgs or "Reminder")
+        reminderPopup.msg:AddMessage(tostring(msgs or "Reminder"))
     end
-    reminderPopup.text:SetText(out)
     reminderPopup:Show()
 end
 

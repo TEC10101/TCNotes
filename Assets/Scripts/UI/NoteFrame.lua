@@ -9,15 +9,86 @@ local MIN_WIDTH = 240
 local MIN_HEIGHT = 300
 -- Base target height when frame is collapsed; will be raised if backdrop insets demand more.
 local COLLAPSED_BASE_HEIGHT = 40
+-- Extra vertical padding added to measured row heights to avoid overlap when
+-- wrapping occurs. Increase if your font or theme needs more breathing room.
+local ROW_PADDING = 8
 
 local sections = {
     { key = "global", title = "Global Notes" },
     { key = "char", title = "Character Notes" },
 }
 
+--------------------------------------------------
+-- Link insertion support (SHIFT-click item links)
+--------------------------------------------------
+-- Returns the TCNotes editbox that currently has focus, if any.
+-- Checks per-section add boxes first, then inline row edit boxes.
+function M:GetFocusedNotesEditBox()
+    if not M or not M.frame then return nil end
+    -- Section add boxes
+    for _, def in ipairs(sections) do
+        local c = def.container
+        local eb = c and c.addBox
+        if eb and eb.HasFocus and eb:HasFocus() then
+            return eb
+        end
+    end
+    -- Inline row edit boxes
+    for _, def in ipairs(sections) do
+        local c = def.container
+        local rows = c and c.rows
+        if rows then
+            for i = 1, #rows do
+                local row = rows[i]
+                local eb = row and row.editBox
+                if eb and eb.HasFocus and eb:HasFocus() then
+                    return eb
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- One-time wrapper around ChatEdit_InsertLink so SHIFT-clicked links
+-- go into the focused TCNotes editbox when applicable.
+do
+    local _origChatEdit_InsertLink
+    function M:SetupLinkHook()
+        if M._linkHooked then return end
+        -- Only proceed if the global inserter exists
+        if type(ChatEdit_InsertLink) ~= "function" then
+            return
+        end
+        _origChatEdit_InsertLink = ChatEdit_InsertLink
+        ChatEdit_InsertLink = function(link)
+            -- Prefer inserting into TCNotes if one of our editboxes has focus
+            local eb = M.GetFocusedNotesEditBox and M:GetFocusedNotesEditBox()
+            if eb and eb.Insert then
+                eb:Insert(link)
+                return true
+            end
+            -- Otherwise, fall back to original behavior (chat, other addons)
+            if _origChatEdit_InsertLink then
+                return _origChatEdit_InsertLink(link)
+            end
+            return false
+        end
+        M._linkHooked = true
+    end
+end
+
 -- Removes leading/trailing whitespace from a string for clean inputs.
 local function Trim(s)
     return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+-- Extracts the first hyperlink payload between |H and |h (e.g. item:1234:...)
+local function ExtractFirstHyperlink(s)
+    if type(s) ~= "string" or s == "" then return nil end
+    -- capture minimal substring between |H and |h (works for item, spell, quest, etc.)
+    local link = s:match("|H(.-)|h")
+    return link
 end
 
 -- Reminder dialog (lazy-created)
@@ -228,6 +299,7 @@ local function CreateRow(parent)
     f.delete:SetScript("OnEnter", function() f.delete:SetAlpha(1) end)
     f.delete:SetScript("OnLeave", function() f.delete:SetAlpha(0.6) end)
     f.delete:SetAlpha(0.6)
+    -- Hidden measurer FontString (used to compute wrapped height)
     f.text = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     f.text:SetPoint("LEFT", f.delete, "RIGHT", 4, 0)
     -- leave some space on the right for the reminder button
@@ -235,6 +307,18 @@ local function CreateRow(parent)
     f.text:SetJustifyH("LEFT")
     f.text:SetJustifyV("TOP")
     f.text:SetWordWrap(true)
+    f.text:Hide()
+    -- Visible message frame with hyperlink support
+    f.msg = CreateFrame("ScrollingMessageFrame", nil, f)
+    f.msg:SetPoint("LEFT", f.delete, "RIGHT", 4, 0)
+    f.msg:SetPoint("RIGHT", -28, 0)
+    f.msg:SetFading(false)
+    f.msg:SetMaxLines(100)
+    f.msg:SetJustifyH("LEFT")
+    f.msg:SetIndentedWordWrap(false)
+    f.msg:EnableMouse(true)
+    if f.msg.SetHyperlinksEnabled then f.msg:SetHyperlinksEnabled(true) end
+    if f.msg.SetFontObject then f.msg:SetFontObject(GameFontHighlightSmall) end
     -- Edit box for inline editing
     f.editBox = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
     f.editBox:SetAutoFocus(false)
@@ -252,7 +336,7 @@ local function CreateRow(parent)
     end
     f.editing = false
     f.editBox:SetScript("OnEscapePressed", function(b)
-        b:ClearFocus(); f.editing = false; b:Hide(); f.text:Show()
+        b:ClearFocus(); f.editing = false; b:Hide(); if f.msg then f.msg:Show() end
     end)
     local function finishEdit()
         local txt = Trim(f.editBox:GetText())
@@ -260,7 +344,7 @@ local function CreateRow(parent)
             M:UpdateNote(f.sectionKey, f.dataIndex, txt)
             f.editing = false
             f.editBox:Hide()
-            f.text:Show()
+            if f.msg then f.msg:Show() end
             if RefreshSection and f.sectionDef then
                 RefreshSection(f.sectionDef)
             end
@@ -269,10 +353,10 @@ local function CreateRow(parent)
     f.editBox:SetScript("OnEnterPressed", function() finishEdit() end)
     f.editBox:SetScript("OnEditFocusLost", function() finishEdit() end)
     f:SetScript("OnMouseDown", function(_, btn)
-        if btn == "LeftButton" and not f.editing and f.text:IsShown() and f.dataIndex then
+        if btn == "LeftButton" and not f.editing and ((f.msg and f.msg:IsShown()) or (f.text and f.text:IsShown())) and f.dataIndex then
             f.editing = true
             f.editBox:SetText(f.text:GetText())
-            f.text:Hide()
+            if f.msg then f.msg:Hide() end
             f.editBox:Show()
             f.editBox:SetFocus()
         end
@@ -312,6 +396,41 @@ local function CreateRow(parent)
         GameTooltip:SetText(tip)
     end)
     f.reminderBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Hyperlink tooltips for visible text: only show when hovering actual links
+    -- Track whether the mouse is currently over a hyperlink so clicks on
+    -- non-link areas can fall through to the row's edit handler.
+    f._hoveringLink = false
+    f.msg:SetScript("OnHyperlinkEnter", function(self, link, text, button)
+        local parent = self:GetParent()
+        if parent and parent.editing then return end
+        f._hoveringLink = true
+        GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+        if GameTooltip.SetHyperlink then GameTooltip:SetHyperlink(link) end
+        GameTooltip:Show()
+    end)
+    f.msg:SetScript("OnHyperlinkLeave", function(self)
+        f._hoveringLink = false
+        GameTooltip:Hide()
+    end)
+
+    -- Clicking the visible message should enter edit mode when not clicking
+    -- an actual hyperlink. We use the hovering flag set by hyperlink events
+    -- to determine whether to start editing or allow the hyperlink click.
+    f.msg:SetScript("OnMouseDown", function(self, btn)
+        if btn ~= "LeftButton" then return end
+        if f._hoveringLink then
+            -- clicking a link; let the message frame handle hyperlink clicks
+            return
+        end
+        if not f.editing and f.dataIndex then
+            f.editing = true
+            f.editBox:SetText(f.text and f.text:GetText() or "")
+            self:Hide()
+            f.editBox:Show()
+            f.editBox:SetFocus()
+        end
+    end)
 
     return f
 end
@@ -383,14 +502,16 @@ RefreshSection = function(def)
 
         local note = notes[i]
         local txt = (type(note) == "table" and note.text) or note
+        -- measure the wrapped height using the hidden FontString
         row.text:SetWidth(textWidth)
-
-        -- set text and ensure it is visible (fixes cases where color/visibility/state
-        -- gets lost after collapsing/expanding)
-        row.text:SetText("")             -- force a text refresh cycle
+        row.text:SetText("")
         row.text:SetText(txt)
-        row.text:SetTextColor(1,1,1,1)
-        row.text:Show()
+        -- update visible message frame content
+        if row.msg then
+            row.msg:Clear()
+            row.msg:AddMessage(txt)
+            row.msg:SetWidth(textWidth)
+        end
 
         row.delete:SetScript("OnClick", function()
             M:DeleteNote(def.key, i)
@@ -415,14 +536,18 @@ RefreshSection = function(def)
 
         if not row.editing then
             row.editBox:Hide()
-            row.text:Show()
+            if row.msg then row.msg:Show() end
         else
             -- when editing, set editBox size to match text area
             row.editBox:SetWidth(textWidth)
-            row.editBox:SetHeight(math.max(20, row.text:GetStringHeight()))
+            row.editBox:SetHeight(math.max(20, row.text:GetStringHeight() + ROW_PADDING))
+            if row.msg then row.msg:Hide() end
         end
 
-        local h = math.max(LINE_HEIGHT, SafeStringHeight(row.text))
+        -- Add a small vertical padding so ScrollingMessageFrame rendering and
+        -- FontString measurement align (prevents overlap for multi-line rows).
+        local h = math.max(LINE_HEIGHT, SafeStringHeight(row.text) + ROW_PADDING)
+        if row.msg then row.msg:SetHeight(h) end
         row:SetHeight(h)
         totalH = totalH + h
         row:Show()
@@ -522,8 +647,16 @@ RefreshSection = function(def)
 
         local note = notes[i]
         local txt = (type(note) == "table" and note.text) or note
+        -- measure with hidden FontString
         row.text:SetWidth(textWidth)
+        row.text:SetText("")
         row.text:SetText(txt)
+        -- set visible message text with hyperlinks
+        if row.msg then
+            row.msg:Clear()
+            row.msg:AddMessage(txt)
+            row.msg:SetWidth(textWidth)
+        end
         row.delete:SetScript("OnClick", function()
             M:DeleteNote(def.key, i)
             RefreshSection(def)
@@ -547,14 +680,16 @@ RefreshSection = function(def)
 
         if not row.editing then
             row.editBox:Hide()
-            row.text:Show()
+            if row.msg then row.msg:Show() end
         else
             -- when editing, set editBox size to match text area
             row.editBox:SetWidth(textWidth)
-            row.editBox:SetHeight(math.max(20, row.text:GetStringHeight()))
+            row.editBox:SetHeight(math.max(20, row.text:GetStringHeight() + ROW_PADDING))
+            if row.msg then row.msg:Hide() end
         end
 
-        local h = math.max(LINE_HEIGHT, SafeStringHeight(row.text))
+        local h = math.max(LINE_HEIGHT, SafeStringHeight(row.text) + ROW_PADDING)
+        if row.msg then row.msg:SetHeight(h) end
         row:SetHeight(h)
         totalH = totalH + h
         row:Show()
@@ -879,6 +1014,9 @@ function TCNotes_CreateFrame()
         HookSection(def)
         def.container.refreshNeeded = true
     end
+
+    -- Enable SHIFT-click item link insertion into focused TCNotes editboxes
+    if M and M.SetupLinkHook then M:SetupLinkHook() end
 
     -- Single expand/collapse toggle button (left of close button)
     -- create a wrapper for the expand/collapse button so it matches the close button border

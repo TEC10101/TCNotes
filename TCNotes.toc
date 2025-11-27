@@ -2,7 +2,7 @@
 ## Title: TCNotes
 ## Notes: Minimal global & per-character notes.  Add a reminder to popup every login, or when you reach a certain level!
 ## Author: Refactored
-## Version: 1.2.2
+## Version: 1.3.0
 ## SavedVariables: TCNotesDB
 
 ## OptionalDeps: LibSharedMedia-3.0
