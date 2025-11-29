@@ -1047,7 +1047,8 @@ function TCNotes_CreateFrame()
 
     LayoutSections()
 
-    frame.pendingRefresh = false
+    -- Ensure a first refresh happens next frame after layout widths are known
+    frame.pendingRefresh = true
     frame:SetScript("OnUpdate", function(self)
         if self.pendingRefresh then
             self.pendingRefresh = false
