@@ -254,7 +254,7 @@ local function CheckRemindersOnLogin()
     local g = M:GetNotes("global")
     for i = 1, #g do
         local n = g[i]
-        if type(n) == "table" and n.reminder and (n.reminder.type == "next_login" or n.reminder.type == "every_login") then
+        if type(n) == "table" and not n.deleted and n.reminder and (n.reminder.type == "next_login" or n.reminder.type == "every_login") then
             table.insert(reminders, "Global: " .. (n.text or "(note)"))
             -- next_login is a one-shot, clear it; every_login persists
             if n.reminder.type == "next_login" then
@@ -269,7 +269,7 @@ local function CheckRemindersOnLogin()
     local c = TCNotesDB.charNotes[M.charKey] or {}
     for i = 1, #c do
         local n = c[i]
-        if type(n) == "table" and n.reminder and (n.reminder.type == "next_login" or n.reminder.type == "every_login") then
+        if type(n) == "table" and not n.deleted and n.reminder and (n.reminder.type == "next_login" or n.reminder.type == "every_login") then
             table.insert(reminders, "Char: " .. (n.text or "(note)"))
             if n.reminder.type == "next_login" then
                 n.reminder = nil
@@ -363,6 +363,8 @@ local function InitializeAddon()
     if M.initialized then return end
     InitSavedVariables()
     EnsureCharTable() -- charKey ensured lazily inside
+    -- Auto-prune soft-deleted notes on init so flagged rows are removed
+    if M.PruneDeleted then M:PruneDeleted() end
     if TCNotes_CreateFrame then
         M.restoring = true
         TCNotes_CreateFrame(TCNotesDB.frameState)
@@ -387,7 +389,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
             local function checkLevelForList(list, scope)
                 for i = 1, #list do
                     local n = list[i]
-                    if type(n) == "table" and n.reminder and n.reminder.type == "level" then
+                    if type(n) == "table" and not n.deleted and n.reminder and n.reminder.type == "level" then
                         local target = tonumber(n.reminder.level) or 0
                         if target > 0 and newLevel >= target then
                             table.insert(reminders, (scope or "Note") .. ": " .. (n.text or "(note)"))
