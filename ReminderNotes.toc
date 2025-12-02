@@ -1,9 +1,9 @@
 ## Interface: 30300
-## Title: TCNotes
+## Title: ReminderNotes
 ## Notes: Minimal global & per-character notes.  Add a reminder to popup every login, or when you reach a certain level!
 ## Author: Refactored
-## Version: 1.3.2
-## SavedVariables: TCNotesDB
+## Version: 2.0.0
+## SavedVariables: ReminderNotesDB
 
 ## OptionalDeps: LibSharedMedia-3.0
 

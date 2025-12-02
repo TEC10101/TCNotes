@@ -1,7 +1,7 @@
 --------------------------------------------------
 -- Section 1: Event Frame Registration
 --------------------------------------------------
-local addonName = ... -- should resolve to folder "TCNotes"
+local addonName = ... -- should resolve to folder name "ReminderNotes"
 local ADDON_VERSION = (GetAddOnMetadata and GetAddOnMetadata(addonName, "Version")) or "0.0.0"
 
 local eventFrame = CreateFrame("Frame")
@@ -12,29 +12,27 @@ eventFrame:RegisterEvent("PLAYER_LEVEL_UP")
 --------------------------------------------------
 -- Section 2: Top-level Variables and SavedVariables Schema
 --------------------------------------------------
-TCNotes = TCNotes or {}
-local M = TCNotes
+ReminderNotesDB = ReminderNotesDB or {}
+local M = ReminderNotesDB
 M.charKey = nil
 M.initialized = false
 M.restoring = false
 M.frame = nil
 M.deleteStack = M.deleteStack or {}
 
--- SavedVariables root: TCNotesDB
--- Schema:
--- TCNotesDB = {
---   globalNotes = { "note text", ... },
---   charNotes = { ["Char-Realm"] = { "note", ... } },
---   frameState = { x=number, y=number, width=number, height=number, shown=boolean },
--- }
+-- Prints a message to the default chat frame, prefixed with ReminderNotes.
+-- Used for status and debug output.
+function M:Print(msg)
+    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99ReminderNotes|r: " .. tostring(msg))
+end
 
 local function InitSavedVariables()
-    TCNotesDB = TCNotesDB or {}
-    TCNotesDB.globalNotes = TCNotesDB.globalNotes or {}
-    TCNotesDB.charNotes = TCNotesDB.charNotes or {}
-    TCNotesDB.version = TCNotesDB.version or ADDON_VERSION
+    ReminderNotesDB = ReminderNotesDB or {}
+    ReminderNotesDB.globalNotes = ReminderNotesDB.globalNotes or {}
+    ReminderNotesDB.charNotes = ReminderNotesDB.charNotes or {}
+    ReminderNotesDB.version = ADDON_VERSION
     -- load DB or initialize defaults
-    TCNotesDB.frameState = TCNotesDB.frameState or {
+    ReminderNotesDB.frameState = ReminderNotesDB.frameState or {
         width = 400,
         height = 500,
         -- expanded height is used when not collapsed
@@ -63,7 +61,7 @@ local function EnsureCharTable()
         M.charKey = GetCharKey()
     end
     if not M.charKey then return end
-    TCNotesDB.charNotes[M.charKey] = TCNotesDB.charNotes[M.charKey] or {}
+    ReminderNotesDB.charNotes[M.charKey] = ReminderNotesDB.charNotes[M.charKey] or {}
 end
 
 -- Trims whitespace from the start and end of a string.
@@ -80,10 +78,10 @@ end
 
 function M:GetNotes(section)
     if section == "global" then
-        return TCNotesDB.globalNotes
+        return ReminderNotesDB.globalNotes
     elseif section == "char" then
         EnsureCharTable()
-        return TCNotesDB.charNotes[M.charKey] or {}
+        return ReminderNotesDB.charNotes[M.charKey] or {}
     end
     return {}
 end
@@ -162,9 +160,9 @@ function M:PruneDeleted()
             end
         end
     end
-    prune(TCNotesDB.globalNotes)
-    if M.charKey and TCNotesDB.charNotes[M.charKey] then
-        prune(TCNotesDB.charNotes[M.charKey])
+    prune(ReminderNotesDB.globalNotes)
+    if M.charKey and ReminderNotesDB.charNotes[M.charKey] then
+        prune(ReminderNotesDB.charNotes[M.charKey])
     end
 end
 
@@ -177,7 +175,7 @@ end
 local reminderPopup
 local function ShowReminderPopup(msgs)
     if not reminderPopup then
-        reminderPopup = CreateFrame("Frame", "TCNotesReminderPopup", UIParent, "BackdropTemplate")
+        reminderPopup = CreateFrame("Frame", "ReminderNotesReminderPopup", UIParent, "BackdropTemplate")
         reminderPopup:SetSize(440, 160)
         reminderPopup:SetPoint("CENTER")
         -- ensure the reminder popup appears below most UI elements
@@ -266,7 +264,7 @@ local function CheckRemindersOnLogin()
     -- Character notes: only process the notes for the character we're currently logged into.
     -- EnsureCharTable() makes sure M.charKey is set and the table exists.
     EnsureCharTable()
-    local c = TCNotesDB.charNotes[M.charKey] or {}
+    local c = ReminderNotesDB.charNotes[M.charKey] or {}
     for i = 1, #c do
         local n = c[i]
         if type(n) == "table" and not n.deleted and n.reminder and (n.reminder.type == "next_login" or n.reminder.type == "every_login") then
@@ -294,20 +292,20 @@ function M:SaveFrameState()
       --M:Print("Skipping SaveFrameState during restore")
       return
     end
-    TCNotesDB.frameState.width = M.frame:GetWidth()
+    ReminderNotesDB.frameState.width = M.frame:GetWidth()
     if not M.frame.collapsed then
-        TCNotesDB.frameState.height = M.frame:GetHeight()
-        TCNotesDB.frameState.expandedHeight = TCNotesDB.frameState.height
+        ReminderNotesDB.frameState.height = M.frame:GetHeight()
+        ReminderNotesDB.frameState.expandedHeight = ReminderNotesDB.frameState.height
     end
-    TCNotesDB.frameState.strata = M.frame:GetFrameStrata()
-    TCNotesDB.frameState.collapsed = M.frame.collapsed and true or false
-    TCNotesDB.frameState.shown = M.frame:IsShown() or false
-    TCNotesDB.frameState.locked = M.frame.locked and true or false
+    ReminderNotesDB.frameState.strata = M.frame:GetFrameStrata()
+    ReminderNotesDB.frameState.collapsed = M.frame.collapsed and true or false
+    ReminderNotesDB.frameState.shown = M.frame:IsShown() or false
+    ReminderNotesDB.frameState.locked = M.frame.locked and true or false
     local left = M.frame:GetLeft()
     local top = M.frame:GetTop()
     if left and top then
-        TCNotesDB.frameState.x = left
-        TCNotesDB.frameState.y = top
+        ReminderNotesDB.frameState.x = left
+        ReminderNotesDB.frameState.y = top
     end
 end
 
@@ -318,10 +316,10 @@ function M:Toggle()
     if not M.frame then return end
     if M.frame:IsShown() then
       M.frame:Hide()
-      TCNotesDB.frameState.shown = false
+    ReminderNotesDB.frameState.shown = false
     else
             M.frame:Show()
-            TCNotesDB.frameState.shown = true
+            ReminderNotesDB.frameState.shown = true
             -- If the frame implements deferred refresh (pendingRefresh), use it so
             -- layout computations happen after the frame becomes visible. Otherwise
             -- fall back to immediate refresh.
@@ -335,8 +333,8 @@ function M:Toggle()
 end
 
 -- Section 6: Slash Command Registration
-SLASH_TCNOTES1 = "/notes"
-SlashCmdList["TCNOTES"] = function(msg)
+SLASH_REMINDERNOTES1 = "/notes"
+SlashCmdList["REMINDERNOTES"] = function(msg)
     msg = Trim(msg or "")
     if msg == "debug" then
         InitSavedVariables()
@@ -365,9 +363,9 @@ local function InitializeAddon()
     EnsureCharTable() -- charKey ensured lazily inside
     -- Auto-prune soft-deleted notes on init so flagged rows are removed
     if M.PruneDeleted then M:PruneDeleted() end
-    if TCNotes_CreateFrame then
+    if ReminderNotes_CreateFrame then
         M.restoring = true
-        TCNotes_CreateFrame(TCNotesDB.frameState)
+        ReminderNotes_CreateFrame(ReminderNotesDB.frameState)
         M.restoring = false
     end
     M.initialized = true
@@ -414,11 +412,5 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
     end
 end)
-
--- Prints a message to the default chat frame, prefixed with TCNotes.
--- Used for status and debug output.
-function M:Print(msg)
-    DEFAULT_CHAT_FRAME:AddMessage("|cff33ff99TCNotes|r: " .. tostring(msg))
-end
 
 M:Print("Loaded. Use /notes to toggle.")
