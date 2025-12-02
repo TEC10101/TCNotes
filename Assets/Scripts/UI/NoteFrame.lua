@@ -1,7 +1,7 @@
 --------------------------------------------------
 -- Section 1: Module setup and constants
 --------------------------------------------------
-local M = TCNotes
+local M = ReminderNotesDB
 if not M then return end
 
 local LINE_HEIGHT = 16
@@ -95,7 +95,7 @@ end
 local ReminderDlg
 local function EnsureReminderDialog()
     if ReminderDlg then return ReminderDlg end
-    local dlg = CreateFrame("Frame", "TCNotes_ReminderDlg", UIParent, "BackdropTemplate")
+    local dlg = CreateFrame("Frame", "ReminderNotes_ReminderDlg", UIParent, "BackdropTemplate")
     dlg:SetSize(300, 140)
     dlg:SetPoint("CENTER")
     dlg:SetBackdrop({ bgFile = "Interface/DialogFrame/UI-DialogBox-Background", edgeFile = "Interface/DialogFrame/UI-DialogBox-Border", tile = true, tileSize = 32, edgeSize = 16, insets = { left = 8, right = 8, top = 8, bottom = 8 } })
@@ -633,14 +633,14 @@ local function HookSection(def)
 end
 
 
-function TCNotes_CreateFrame()
+function ReminderNotes_CreateFrame()
   -- Creates, configures, and restores the TCNotes frame on ADDON_LOADED.
 
     if frame then return end
-    frame = CreateFrame("Frame", "TCNotesFrame", UIParent, "BackdropTemplate")
+    frame = CreateFrame("Frame", "ReminderNotesFrame", UIParent, "BackdropTemplate")
 
-    local savedState = TCNotesDB.frameState
-    frame.locked = TCNotesDB.frameState.locked
+    local savedState = ReminderNotesDB.frameState
+    frame.locked = ReminderNotesDB.frameState.locked
     M.frame = frame
     local defaultW, defaultH = 400, 500
     local w = (savedState and savedState.width) or defaultW
@@ -665,8 +665,8 @@ function TCNotes_CreateFrame()
     frame:SetFrameStrata("LOW")
     -- if savedState and savedState.strata then
     --     frame:SetFrameStrata(savedState.strata)
-    -- elseif TCNotesDB and TCNotesDB.frameState and TCNotesDB.frameState.strata then
-    --     frame:SetFrameStrata(TCNotesDB.frameState.strata)
+    -- elseif ReminderNotesDB and ReminderNotesDB.frameState and ReminderNotesDB.frameState.strata then
+    --     frame:SetFrameStrata(ReminderNotesDB.frameState.strata)
     -- else
     --     frame:SetFrameStrata("HIGH")
     -- end
@@ -816,8 +816,8 @@ function TCNotes_CreateFrame()
 
     lockBtn:SetScript("OnClick", function()
         frame.locked = not frame.locked
-        if TCNotesDB and TCNotesDB.frameState then
-            TCNotesDB.frameState.locked = frame.locked and true or false
+        if ReminderNotesDB and ReminderNotesDB.frameState then
+            ReminderNotesDB.frameState.locked = frame.locked and true or false
         end
         frame:SetMovable(not frame.locked)
         frame:SetResizable(not frame.locked)
@@ -860,8 +860,8 @@ function TCNotes_CreateFrame()
         -- Prevent closing when frame is locked
         if frame.locked then return end
         frame:Hide()
-        if TCNotesDB and TCNotesDB.frameState then
-            TCNotesDB.frameState.shown = false
+        if ReminderNotesDB and ReminderNotesDB.frameState then
+            ReminderNotesDB.frameState.shown = false
         end
         if M.SaveFrameState then M:SaveFrameState() end
     end)
@@ -995,7 +995,7 @@ function TCNotes_CreateFrame()
             frame:SetHeight(collapsedH)
             if frame.resizeHandle then frame.resizeHandle:Hide() end
         else
-            local restoreH = (TCNotesDB and TCNotesDB.frameState and TCNotesDB.frameState.expandedHeight)
+            local restoreH = (ReminderNotesDB and ReminderNotesDB.frameState and ReminderNotesDB.frameState.expandedHeight)
                               or frame.preCollapseHeight or frame:GetHeight()
             frame:SetMinResize(MIN_WIDTH, MIN_HEIGHT)
             frame:SetHeight(restoreH)
@@ -1025,8 +1025,8 @@ function TCNotes_CreateFrame()
 
         frame.pendingRefresh = not frame.collapsed  -- refresh after next frame so widths are final
 
-        if TCNotesDB and TCNotesDB.frameState then
-            TCNotesDB.frameState.collapsed = frame.collapsed
+        if ReminderNotesDB and ReminderNotesDB.frameState then
+            ReminderNotesDB.frameState.collapsed = frame.collapsed
         end
         if M.SaveFrameState then M:SaveFrameState() end
     end)
