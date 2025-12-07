@@ -336,6 +336,7 @@ local function CreateRow(parent)
     end
     f.editing = false
     f.editBox:SetScript("OnEscapePressed", function(b)
+        b:SetText("")
         b:ClearFocus(); f.editing = false; b:Hide(); if f.msg then f.msg:Show() end
     end)
     local function finishEdit()
@@ -580,7 +581,10 @@ local function CreateSection(parent, def)
         bg:SetPoint("BOTTOMRIGHT", -4, 2)
         container.addBox.bg = bg
     end
-    container.addBox:SetScript("OnEscapePressed", function(b) b:ClearFocus() end)
+    container.addBox:SetScript("OnEscapePressed", function(b)
+        b:SetText("")
+        b:ClearFocus()
+    end)
     local function tryAdd()
         local txt = Trim(container.addBox:GetText())
         if txt ~= "" then
