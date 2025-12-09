@@ -336,7 +336,6 @@ local function CreateRow(parent)
     end
     f.editing = false
     f.editBox:SetScript("OnEscapePressed", function(b)
-        b:SetText("")
         b:ClearFocus(); f.editing = false; b:Hide(); if f.msg then f.msg:Show() end
     end)
     local function finishEdit()
