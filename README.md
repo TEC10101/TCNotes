@@ -2,6 +2,8 @@
 
 A lightweight in-game note manager for World of Warcraft Wrath v3.3.5, providing global and character-scoped notes, inline editing, and simple reminders.
 
+<img width="517" height="603" alt="image" src="https://github.com/user-attachments/assets/19b81213-2879-4c48-9ca6-d4e3f55c54f5" />
+
 Features
 
 - **Global & Character Notes:** Keep notes that apply to all characters or specific to the current character.
@@ -11,6 +13,8 @@ Features
 - **Link Insertion:** Shift-click item/spell links to insert them into the focused note edit box.
 - **Soft Delete & Undo:** Deleting a note flags it for removal and pushes it to an undo stack; use the undo command to restore.
 - **UI:** Resizable, draggable frame with a lock button to prevent moving/closing.
+
+<img width="479" height="224" alt="image" src="https://github.com/user-attachments/assets/bb70bdd2-2faf-48a2-88ad-5c8ea31fe19a" />
 
 How To (In-Game)
 
